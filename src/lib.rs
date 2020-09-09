@@ -12,6 +12,12 @@ pub fn chomp(tokens: TokenStream) -> TokenStream {
     .into()
 }
 
+/// `cmp_tree_to_conjunction_tree` turns a tree of chained
+/// comparisons that would normally not be valid rust into
+/// a valid tree of conjunctions.
+///
+/// In other words, it turns something like `a < b < c` into
+/// `a < b && b < c`.
 fn cmp_tree_to_conjunction_tree(cmp_tree: ExprBinary) -> Result<Expr, syn::Error> {
     let mut exprs = Vec::new();
     flatten_tree(cmp_tree, &mut exprs)?;
@@ -28,10 +34,34 @@ fn is_comparison_op(op: &syn::BinOp) -> bool {
     }
 }
 
+/// `is_comparison` returns `true` if `expr` is a
+/// comparison, i.e. any operation that is supported
+/// by types that implement `PartialEq` or `PartialOrd`.
 fn is_comparison(expr: &ExprBinary) -> bool {
     is_comparison_op(&expr.op)
 }
 
+/// `flatten_tree` takes a `tree` of binary expressions and flattens it,
+/// appending each individual expression to `container`.
+///
+/// For example, this tree of comparison expressions
+/// (where `en` is an arbitrary expression)
+///
+/// ```
+///          <
+///         / \
+///        <=  e4
+///       /  \
+///      <=   e3
+///     /  \
+///    e1  e2
+/// ```
+///
+/// becomes this flattened list:
+///
+/// ```
+/// [e4, e3, e2, e1]
+/// ```
 fn flatten_tree(tree: ExprBinary, container: &mut Vec<Expr>) -> Result<(), syn::Error> {
     let ExprBinary {
         right,
@@ -75,6 +105,27 @@ fn flatten_tree(tree: ExprBinary, container: &mut Vec<Expr>) -> Result<(), syn::
     };
 }
 
+/// `build_conjunction_tree` turns a list of `Expr`s into
+/// a tree of conjunctions where the last element of the list
+/// is the root of the resulting tree.
+///
+/// For example, this list of four expressions
+///
+/// ```
+/// [e4, e3, e2, e1]
+/// ```
+///
+/// becomes this tree of conjunctions:
+///
+/// ```
+///     &&
+///    /  \
+///   e1   &&
+///       /  \
+///      e2   &&
+///          /  \
+///         e3   e4
+/// ```
 fn build_conjunction_tree(mut exprs: Vec<Expr>) -> Expr {
     let expr = exprs
         .pop()
@@ -87,6 +138,8 @@ fn build_conjunction_tree(mut exprs: Vec<Expr>) -> Expr {
     }
 }
 
+/// `new_conjunction` returns a new binary expression of the form
+/// `left && right`.
 fn new_conjuction(left: Expr, right: Expr) -> ExprBinary {
     let (left_span, right_span) = (left.span(), right.span());
 
