@@ -1,48 +1,68 @@
 //! `chain_cmp` lets you chain comparison operators like
-//! you would in mathematics.
+//! you would in mathematics using the [`chmp!`] macro.
 
 use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::{parse_macro_input, spanned::Spanned, Expr, ExprBinary, Token};
 
-/// Use the `chomp` macro to chain comparison operators.
+/// Use the `chmp` macro to chain comparison operators.
+///
+/// You can use all of these operators: `<`, `<=`, `>`, `>=`, `==`, `!=`.
 ///
 /// # Examples
 ///
 /// ## Basic usage
 ///
 /// ```
-/// use chain_cmp::chomp;
+/// use chain_cmp::chmp;
 ///
 /// let (a, b, c) = (1, 2, 3);
 ///
-/// assert!(chomp!(a < b < c));
+/// let verbose = a < b && b <= c;
+/// let concise = chmp!(a < b <= c);
+/// assert_eq!(concise, verbose);
 ///
 /// // You can use equality operators as well:
-/// assert!(chomp!(a != b != c));
+/// assert!(chmp!(a != b != c));
 ///
 /// // And you can even chain more than three operators:
-/// assert!(chomp!(a != b != c != a)); // making sure these values are pairwise distinct
+/// assert!(chmp!(a != b != c != a)); // making sure these values are pairwise distinct
+///
+/// // And of course mix and match operators:
+/// assert!(chmp!(a < b <= c != a == a));
+/// ```
+///
+/// ## Short-circuiting
+///
+/// `chmp` will short-circuit to evaluate the fewest expressions
+/// possible.
+///
+/// ```
+/// # use chain_cmp::chmp;
+/// fn panics() -> i32 {
+///     panic!();
+/// }
+///
+/// assert!(!chmp!(i32::MAX < i32::MIN < panics())); // this **won't** panic
 /// ```
 ///
 /// ## Comparing arbitrary expressions
 ///
 /// As long as the comparison operators have the lowest precedence,
-/// `chomp` will evaluate any expression, like variables, blocks,
+/// `chmp` will evaluate any expression, like variables, blocks,
 /// function calls, etc.
 ///
 /// ```
-/// use chain_cmp::chomp;
-///
+/// # use chain_cmp::chmp;
 /// const ANSWER: u32 = 42;
 ///
-/// assert!(chomp!({
+/// assert!(chmp!({
 ///     println!("Life, the Universe, and Everything");
 ///     ANSWER
 /// } != 6 * 9 == 54));
 /// ```
 #[proc_macro]
-pub fn chomp(tokens: TokenStream) -> TokenStream {
+pub fn chmp(tokens: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(tokens as ExprBinary);
     match cmp_tree_to_conjunction_tree(ast) {
         Ok(expr) => expr.into_token_stream(),
