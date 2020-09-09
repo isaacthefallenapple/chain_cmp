@@ -79,8 +79,7 @@ pub fn chmp(tokens: TokenStream) -> TokenStream {
 /// `a < b && b < c`.
 fn cmp_tree_to_conjunction_tree(cmp_tree: ExprBinary) -> Result<Expr, syn::Error> {
     let mut exprs = Vec::new();
-    flatten_tree(cmp_tree, &mut exprs)?;
-    Ok(build_conjunction_tree(exprs))
+    flatten_tree(cmp_tree, &mut exprs).map(|_| build_conjunction_tree(exprs))
 }
 
 /// `is_comparison_op` returns `true` if `op` is one of
@@ -138,11 +137,11 @@ fn flatten_tree(mut tree: ExprBinary, container: &mut Vec<Expr>) -> Result<(), s
                 Expr::Binary(expr) => expr,
                 _ => unreachable!(),
             };
-            container.push(tree.into());
+            container.push(into_expr(tree));
             flatten_tree(rest, container)
         }
         _ => {
-            container.push(tree.into());
+            container.push(into_expr(tree));
             Ok(())
         }
     }
@@ -177,8 +176,12 @@ fn build_conjunction_tree(mut exprs: Vec<Expr>) -> Expr {
     if exprs.is_empty() {
         expr
     } else {
-        new_conjuction(expr, build_conjunction_tree(exprs)).into()
+        into_expr(new_conjuction(expr, build_conjunction_tree(exprs)))
     }
+}
+
+fn into_expr(bin_expr: ExprBinary) -> Expr {
+    Expr::Binary(bin_expr)
 }
 
 /// `new_conjunction` returns a new binary expression of the form
