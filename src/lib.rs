@@ -1,7 +1,46 @@
+//! `chain_cmp` lets you chain comparison operators like
+//! you would in mathematics.
+
 use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::{parse_macro_input, spanned::Spanned, Expr, ExprBinary, Token};
 
+/// Use the `chomp` macro to chain comparison operators.
+///
+/// # Examples
+///
+/// ## Basic usage
+///
+/// ```
+/// use chain_cmp::chomp;
+///
+/// let (a, b, c) = (1, 2, 3);
+///
+/// assert!(chomp!(a < b < c));
+///
+/// // You can use equality operators as well:
+/// assert!(chomp!(a != b != c));
+///
+/// // And you can even chain more than three operators:
+/// assert!(chomp!(a != b != c != a)); // making sure these values are pairwise distinct
+/// ```
+///
+/// ## Comparing arbitrary expressions
+///
+/// As long as the comparison operators have the lowest precedence,
+/// `chomp` will evaluate any expression, like variables, blocks,
+/// function calls, etc.
+///
+/// ```
+/// use chain_cmp::chomp;
+///
+/// const ANSWER: u32 = 42;
+///
+/// assert!(chomp!({
+///     println!("Life, the Universe, and Everything");
+///     ANSWER
+/// } != 6 * 9 == 54));
+/// ```
 #[proc_macro]
 pub fn chomp(tokens: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(tokens as ExprBinary);
@@ -47,7 +86,7 @@ fn is_comparison(expr: &ExprBinary) -> bool {
 /// For example, this tree of comparison expressions
 /// (where `en` is an arbitrary expression)
 ///
-/// ```
+/// ```nocompile
 ///          <
 ///         / \
 ///        <=  e4
@@ -59,17 +98,11 @@ fn is_comparison(expr: &ExprBinary) -> bool {
 ///
 /// becomes this flattened list:
 ///
-/// ```
+/// ```nocompile
 /// [e4, e3, e2, e1]
 /// ```
-fn flatten_tree(tree: ExprBinary, container: &mut Vec<Expr>) -> Result<(), syn::Error> {
-    let ExprBinary {
-        right,
-        op,
-        left: rest,
-        ..
-    } = tree;
-
+fn flatten_tree(mut tree: ExprBinary, container: &mut Vec<Expr>) -> Result<(), syn::Error> {
+    let op = tree.op;
     if !is_comparison_op(&op) {
         let err = syn::Error::new_spanned(
             op,
@@ -81,28 +114,21 @@ fn flatten_tree(tree: ExprBinary, container: &mut Vec<Expr>) -> Result<(), syn::
         return Err(err);
     }
 
-    return match *rest {
-        Expr::Binary(rest) if is_comparison(&rest) => {
-            let expr = ExprBinary {
-                attrs: vec![],
-                right,
-                op,
-                left: rest.right.clone(),
+    match &*tree.left {
+        Expr::Binary(rest) if is_comparison(rest) => {
+            let lhs = rest.right.clone();
+            let rest = match *std::mem::replace(&mut tree.left, lhs) {
+                Expr::Binary(expr) => expr,
+                _ => unreachable!(),
             };
-            container.push(expr.into());
+            container.push(tree.into());
             flatten_tree(rest, container)
         }
         _ => {
-            let expr = ExprBinary {
-                attrs: vec![],
-                right,
-                op,
-                left: rest,
-            };
-            container.push(expr.into());
+            container.push(tree.into());
             Ok(())
         }
-    };
+    }
 }
 
 /// `build_conjunction_tree` turns a list of `Expr`s into
@@ -111,13 +137,13 @@ fn flatten_tree(tree: ExprBinary, container: &mut Vec<Expr>) -> Result<(), syn::
 ///
 /// For example, this list of four expressions
 ///
-/// ```
+/// ```nocompile
 /// [e4, e3, e2, e1]
 /// ```
 ///
 /// becomes this tree of conjunctions:
 ///
-/// ```
+/// ```nocompile
 ///     &&
 ///    /  \
 ///   e1   &&
