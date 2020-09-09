@@ -87,10 +87,7 @@ fn cmp_tree_to_conjunction_tree(cmp_tree: ExprBinary) -> Result<Expr, syn::Error
 /// `<`, `<=`, `>`, `>=`, `==`, `!=`.
 fn is_comparison_op(op: &syn::BinOp) -> bool {
     use syn::BinOp::*;
-    match op {
-        Ne(_) | Eq(_) | Le(_) | Ge(_) | Lt(_) | Gt(_) => true,
-        _ => false,
-    }
+    matches!(op, Ne(_) | Eq(_) | Le(_) | Ge(_) | Lt(_) | Gt(_))
 }
 
 /// `is_comparison` returns `true` if `expr` is a
